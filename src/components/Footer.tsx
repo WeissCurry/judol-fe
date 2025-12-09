@@ -4,14 +4,8 @@ import { Github, Twitter } from "lucide-react";
 export const Footer = () => {
     return (
         <footer className="relative py-12 md:py-16 font-sans overflow-hidden">
-
-            {/* LAYER 1: Background White Opacity 25% (Sesuai Request) */}
             <div className="absolute inset-0 bg-white/25 z-0" />
-
-            {/* LAYER 2: Grid Pattern */}
             <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none z-0" />
-
-            {/* LAYER 3: Main Content (z-10 agar bisa diklik dan di atas background) */}
             <div className="container px-4 mx-auto flex flex-col md:flex-row items-center justify-between gap-8 relative z-10">
 
                 <div className="flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
