@@ -54,7 +54,7 @@ export const Footer = () => {
                 <div className="flex flex-col items-center md:items-end gap-4">
                     <div className="flex items-center gap-4">
                         <a
-                            href="https://github.com/tawf-labs/judol-fe"
+                            href="https://github.com/WeissCurry/judol-fe"
                             target="_blank"
                             className="group"
                         >
@@ -75,7 +75,7 @@ export const Footer = () => {
                     </div>
 
                     <div className="text-xs font-mono font-bold text-neutral-500 mt-2">
-                        © 2025 TAWF LABS. ALL RIGHTS RESERVED.
+                        © 2025 WEISSCURRY. ALL RIGHTS RESERVED.
                     </div>
                 </div>
 

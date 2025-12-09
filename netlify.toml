@@ -1,0 +1,31 @@
+# Konfigurasi Build Dasar
+[build]
+  # Perintah untuk build project (biasanya npm run build atau yarn build)
+  command = "npm run build"
+  # Folder output hasil build Vite biasanya adalah 'dist'
+  publish = "dist"
+
+# --- PENTING UNTUK REACT ROUTER ---
+# Rule ini mengarahkan semua request ke index.html
+# agar React Router bisa menangani routing di sisi klien.
+# Tanpa ini, refresh halaman di /explore atau /mint akan error 404.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# --- PERFORMANCE HEADERS ---
+# Cache file statis (gambar, font, js hash) agar website ngebut
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Security Headers Dasar
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
