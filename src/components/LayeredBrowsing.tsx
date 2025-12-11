@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
-import { Link } from "react-router-dom"; 
+import { Link } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PaperCard } from "./PaperCard";
-import { Search, Filter, CheckCircle2, Bot, Database, ArrowRight, Loader2, RefreshCw } from "lucide-react";
+import { Search, Filter, CheckCircle2, Bot, Database, ArrowRight, Loader2 } from "lucide-react";
+// Import date-fns for relative time formatting
+import { formatDistanceToNow } from "date-fns";
 
 export const LayeredBrowsing = () => {
   const [searchQuery, setSearchTerm] = useState("");
@@ -22,7 +24,6 @@ export const LayeredBrowsing = () => {
 
   // --- FUNGSI FETCH DATA ---
   const fetchLivedata = useCallback(async () => {
-      // Jangan set isLoading true di sini agar tidak flickering saat auto-refresh
       const localData = localStorage.getItem("myAssets");
       
       if (!localData) {
@@ -33,21 +34,16 @@ export const LayeredBrowsing = () => {
 
       const parsedIds = JSON.parse(localData);
       
-      // Urutkan dari yang terbaru (asumsi array local storage nambah di depan)
-      // Kita ambil reversed atau pastikan saat save di MintWizardPage pakai [new, ...old]
-      
       const newVerified: any[] = [];
       const newProcessing: any[] = [];
       const newDataPool: any[] = [];
 
-      // Gunakan Promise.all untuk fetch metadata secara paralel
       const promises = parsedIds.map(async (item: any) => {
         let finalTitle = item.title;
         let finalAbstract = item.abstract;
         let finalAuthor = item.author?.name || "Unknown";
         
-        // Prioritaskan data yang sudah tersimpan di local untuk kecepatan
-        // Fetch IPFS hanya jika data local kurang lengkap (optional improvement)
+        // Fetch IPFS if metadataUrl exists and local data is incomplete
         if (item.metadataUrl && (!item.abstract || item.abstract.length < 20)) {
             try {
                 const res = await fetch(item.metadataUrl);
@@ -74,13 +70,31 @@ export const LayeredBrowsing = () => {
             if (match) sintaRank = parseInt(match[1]);
         }
 
+        // --- TIMESTAMP LOGIC ---
+        let displayDate = "Just now";
+        
+        if (item.timestamp) {
+            try {
+                displayDate = formatDistanceToNow(new Date(item.timestamp), { addSuffix: true });
+            } catch (e) {
+                displayDate = item.mintDate || "Unknown date";
+            }
+        } else if (item.mintDate) {
+             const dateObj = new Date(item.mintDate);
+             if (!isNaN(dateObj.getTime())) {
+                 displayDate = formatDistanceToNow(dateObj, { addSuffix: true });
+             } else {
+                 displayDate = item.mintDate; 
+             }
+        }
+
         const paperObj = {
             id: item.id,
-            title: finalTitle.toUpperCase(),
+            title: finalTitle?.toUpperCase(),
             abstract: finalAbstract || "Content encrypted pending verification...",
             authors: [{ name: finalAuthor, sintaLevel: sintaRank || 0 }],
             status: item.status, 
-            submitDate: item.mintDate || "Recently",
+            submitDate: displayDate, 
             category: "Research",
             views: item.views || 0,
             downloads: item.downloads || 0,
@@ -104,15 +118,12 @@ export const LayeredBrowsing = () => {
       setIsLoading(false);
   }, []);
 
-  // --- EFFECT 1: Fetch saat Mount & Setup Polling ---
+  // --- EFFECT 1: Fetch on Mount & Setup Polling ---
   useEffect(() => {
-    fetchLivedata(); // Fetch pertama kali
-
-    // Setup Interval (Polling setiap 2 detik) untuk cek perubahan data
-    // Ini cara "kotor" tapi efektif buat hackathon agar data selalu fresh tanpa refresh page
+    fetchLivedata(); 
     const interval = setInterval(() => {
         fetchLivedata();
-    }, 2000); 
+    }, 5000); 
 
     return () => clearInterval(interval);
   }, [fetchLivedata]);
@@ -140,14 +151,13 @@ export const LayeredBrowsing = () => {
             </p>
           </div>
           <div className="hidden md:block">
-             {/* Tombol Manual Refresh (Opsional, buat gaya aja karena udah auto) */}
              <div className="bg-green-400 text-black border-2 border-black p-2 font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-sm flex items-center gap-2 cursor-pointer hover:bg-green-500 transition-colors" onClick={fetchLivedata}>
                 <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"/> LIVE SYNC ACTIVE
              </div>
           </div>
         </div>
 
-        {/* ... (Search & Filter Section Sama seperti sebelumnya) ... */}
+        {/* Search & Filter Bar */}
         <div className="bg-neutral-100 p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] mb-12">
           <div className="flex flex-col lg:flex-row gap-4">
             <div className="flex-1 relative group">
@@ -168,9 +178,9 @@ export const LayeredBrowsing = () => {
                   <SelectValue placeholder="CATEGORY" />
                 </SelectTrigger>
                 <SelectContent className="border-2 border-black rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-white">
-                  <SelectItem value="all" className="focus:bg-yellow-200 focus:text-black">All Categories</SelectItem>
-                  <SelectItem value="blockchain" className="focus:bg-yellow-200 focus:text-black">Blockchain</SelectItem>
-                  <SelectItem value="ai" className="focus:bg-yellow-200 focus:text-black">AI & Data</SelectItem>
+                  <SelectItem value="all" className="focus:bg-yellow-200">All Categories</SelectItem>
+                  <SelectItem value="blockchain" className="focus:bg-yellow-200">Blockchain</SelectItem>
+                  <SelectItem value="ai" className="focus:bg-yellow-200">AI & Data</SelectItem>
                 </SelectContent>
               </Select>
               
@@ -181,7 +191,7 @@ export const LayeredBrowsing = () => {
           </div>
         </div>
 
-        {/* TABS CONTENT (Data Mapping sama, hanya state paperData yang kini auto-update) */}
+        {/* TABS CONTENT */}
         <Tabs defaultValue="verified" className="w-full">
           
           <TabsList className="w-full h-auto bg-transparent p-0 gap-4 flex flex-col md:flex-row justify-start mb-8">
@@ -200,7 +210,7 @@ export const LayeredBrowsing = () => {
           </TabsList>
 
           <div className="min-h-[400px]">
-            {/* Tampilkan Loading hanya saat awal sekali (data kosong & isLoading true) */}
+            {/* Tampilkan Loading hanya saat awal sekali */}
             {isLoading && paperData.verified.length === 0 && paperData.processing.length === 0 && paperData.data_pool.length === 0 ? (
                <div className="flex flex-col items-center justify-center h-64 border-4 border-black border-dashed bg-neutral-50">
                   <Loader2 className="h-12 w-12 animate-spin text-black mb-4" />

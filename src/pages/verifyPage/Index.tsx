@@ -1,29 +1,17 @@
 import { useState, useEffect } from "react";
-import { CheckCircle2, XCircle, AlertTriangle, DollarSign, Award, TrendingUp, BookOpen, Clock, ArrowRight, BrainCircuit, Database, FileText, ChevronRight, ShieldCheck } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, DollarSign, Award, BookOpen, Clock, ArrowRight, BrainCircuit, Database, FileText, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-
-// --- MOCK DATA STATIC (Sebagai Fallback jika belum ada submission) ---
-const STATIC_TASKS = [
-    {
-        id: "101",
-        title: "Analysis of Yield Farming Strategies on Layer 2 Networks",
-        author: "CryptoDev_22",
-        abstract: "We compare APR of Uniswap V3 on Optimism vs Arbitrum. Results show 15% higher efficiency on Arbitrum due to lower latency.",
-        aiPrediction: "CANDIDATE SINTA 2",
-        aiConfidence: 88,
-        reward: "10.0 IP",
-        timeRemaining: "02H 15M",
-        tags: ["DeFi", "Layer 2"],
-        aiFlag: "Clean",
-    },
-];
+// Import unified data source
+import { getPapersByStatus, Paper } from "@/database/MockData";
 
 export default function VerifyPage() {
-    const [tasks, setTasks] = useState<any[]>(STATIC_TASKS);
+    // Initialize with processing tasks from our unified "Database"
+    const [tasks, setTasks] = useState<Paper[]>([]);
+
     const [reviewerStats] = useState({
         reputation: 850,
         level: "SENIOR REVIEWER",
@@ -32,95 +20,45 @@ export default function VerifyPage() {
         nextLevelProgress: 72,
     });
 
-    // --- 1. LOAD TASKS (Prioritaskan Data Minting User & Fetch IPFS) ---
+    // --- 1. LOAD TASKS & FETCH IPFS DETAILS ---
     useEffect(() => {
-        const fetchTasks = async () => {
-            const localData = localStorage.getItem("myAssets");
-            if (localData) {
-                const parsedData = JSON.parse(localData);
+        // 1a. Load initial list from local DB (merges static + local storage)
+        const initialTasks = getPapersByStatus("processing");
 
-                // Filter hanya yang statusnya "processing"
-                const pendingItems = parsedData.filter((item: any) => item.status === 'processing');
+        // 1b. Enhance with IPFS data if available
+        const enrichTasks = async () => {
+            const enriched = await Promise.all(initialTasks.map(async (task) => {
+                // Clone task to avoid mutation
+                const updatedTask = { ...task };
 
-                if (pendingItems.length > 0) {
-                    const fetchedTasks = await Promise.all(pendingItems.map(async (item: any) => {
-                        let title = item.title;
-                        let abstract = item.abstract || "Abstract content pending verification...";
-                        let author = item.author?.name || "Unknown Researcher";
-                        let tagsArray = ["New Submission"];
-                        let aiPrediction = item.tier || "UNVERIFIED CANDIDATE";
-                        let aiConfidence = 85;
+                // If metadataUrl exists, try to fetch fresh data
+                if (updatedTask.metadataUrl) {
+                    try {
+                        const res = await fetch(updatedTask.metadataUrl);
+                        if (res.ok) {
+                            const meta = await res.json();
+                            // Update fields from IPFS
+                            updatedTask.title = meta.name || updatedTask.title;
+                            updatedTask.abstract = meta.description || updatedTask.abstract;
 
-                        // Coba fetch metadata dari IPFS jika URL tersedia
-                        if (item.metadataUrl) {
-                            try {
-                                const response = await fetch(item.metadataUrl);
-                                if (response.ok) {
-                                    const metadata = await response.json();
-                                    title = metadata.name || title;
-                                    abstract = metadata.description || abstract;
+                            const authorAttr = meta.attributes?.find((a: any) => a.trait_type === "Author");
+                            if (authorAttr) updatedTask.author = authorAttr.value;
 
-                                    // Ambil attributes dari metadata
-                                    if (metadata.attributes) {
-                                        const authorAttr = metadata.attributes.find((attr: any) => attr.trait_type === "Author");
-                                        if (authorAttr) author = authorAttr.value;
-
-                                        const keywordsAttr = metadata.attributes.find((attr: any) => attr.trait_type === "Keywords");
-                                        if (keywordsAttr) {
-                                            tagsArray = keywordsAttr.value.split(',').map((k: string) => k.trim().toUpperCase()).slice(0, 3);
-                                        }
-
-                                        const sintaAttr = metadata.attributes.find((attr: any) => attr.trait_type === "SintaPrediction");
-                                        if (sintaAttr) aiPrediction = sintaAttr.value;
-
-                                        const aiScoreAttr = metadata.attributes.find((attr: any) => attr.trait_type === "AICertainty");
-                                        if (aiScoreAttr) {
-                                            // Parse score val (e.g. "85%")
-                                            const scoreVal = parseInt(aiScoreAttr.value.replace('%', ''));
-                                            if (!isNaN(scoreVal)) aiConfidence = scoreVal;
-                                        }
-                                    }
-                                }
-                            } catch (error) {
-                                console.error("Failed to fetch IPFS metadata for verification task:", error);
-                            }
-                        } else {
-                            // Fallback ke local data jika fetch gagal/tidak ada url
-                            // Bersihkan Score AI dari local
-                            if (item.aiScore) {
-                                const scoreVal = typeof item.aiScore === 'string' ? parseInt(item.aiScore.replace('%', '')) : item.aiScore;
-                                if (!isNaN(scoreVal)) aiConfidence = scoreVal;
-                            }
-                            if (item.keywords) {
-                                tagsArray = item.keywords.split(',').map((k: string) => k.trim().toUpperCase()).slice(0, 3);
-                            }
+                            // Parse other attributes if needed, though parseLocalItem in MockData handles most
                         }
-
-                        return {
-                            id: item.id,
-                            title: title,
-                            author: author,
-                            abstract: abstract,
-                            aiPrediction: aiPrediction,
-                            aiConfidence: aiConfidence,
-                            reward: "50.0 IP",
-                            timeRemaining: "23H 59M",
-                            tags: tagsArray,
-                            aiFlag: "Clean"
-                        };
-                    }));
-
-                    setTasks([...fetchedTasks, ...STATIC_TASKS]);
-                } else {
-                    setTasks(STATIC_TASKS);
+                    } catch (e) {
+                        console.warn("IPFS fetch failed for verify task", task.id);
+                    }
                 }
-            }
+                return updatedTask;
+            }));
+            setTasks(enriched);
         };
 
-        fetchTasks();
+        enrichTasks();
     }, []);
 
-    // --- 2. HANDLE VOTE (Update LocalStorage) ---
+    // --- 2. HANDLE VOTE (Update LocalStorage "Database") ---
     const handleVote = (id: string, decision: 'APPROVE' | 'REJECT') => {
         // A. Update UI Feedback
         if (decision === 'APPROVE') {
@@ -134,7 +72,7 @@ export default function VerifyPage() {
             });
         }
 
-        // B. Update LocalStorage (Agar status berubah di Dashboard & Detail Page)
+        // B. Update LocalStorage (Simulating DB Update)
         const localData = localStorage.getItem("myAssets");
         if (localData) {
             const parsedData = JSON.parse(localData);
@@ -152,7 +90,7 @@ export default function VerifyPage() {
             localStorage.setItem("myAssets", JSON.stringify(updatedData));
         }
 
-        // C. Hapus dari list tugas di layar ini
+        // C. Remove from UI list
         setTasks(prev => prev.filter(t => t.id !== id));
     };
 
@@ -185,7 +123,6 @@ export default function VerifyPage() {
 
                 {/* STATS CARDS */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-
                     {/* Reputation Card */}
                     <div className="bg-blue-100 p-6 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-transform">
                         <div className="flex justify-between items-start mb-4">
@@ -260,17 +197,16 @@ export default function VerifyPage() {
                             tasks.map((task) => (
                                 <Card key={task.id} className="group overflow-visible border-2 border-black rounded-none shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-white relative">
 
+
                                     {/* Header */}
                                     <div className="p-6 md:p-8 border-b-2 border-black bg-neutral-50 flex flex-col md:flex-row justify-between gap-6 pl-6 pt-12 md:pt-8 md:pl-8">
                                         <div className="space-y-3">
                                             <div className="flex gap-2 items-center flex-wrap">
-                                                {task.tags && task.tags.map((tag: string) => (
-                                                    <Badge key={tag} variant="outline" className="text-xs font-bold border-2 border-black bg-white rounded-none px-2 py-0.5">
-                                                        {tag.toUpperCase()}
-                                                    </Badge>
-                                                ))}
+                                                <Badge variant="outline" className="text-xs font-bold border-2 border-black bg-white rounded-none px-2 py-0.5">
+                                                    RESEARCH
+                                                </Badge>
                                                 <div className="flex items-center gap-1 text-xs font-bold font-mono bg-red-100 px-2 py-0.5 border border-black text-red-600">
-                                                    <Clock className="h-3 w-3" /> {task.timeRemaining} LEFT
+                                                    <Clock className="h-3 w-3" /> 23H 59M LEFT
                                                 </div>
                                             </div>
                                             <h3 className="text-3xl font-black uppercase leading-none">{task.title}</h3>
@@ -283,7 +219,7 @@ export default function VerifyPage() {
                                             <div className="bg-green-100 border-2 border-black p-3 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] min-w-[120px]">
                                                 <div className="text-xs font-bold uppercase mb-1">Bounty</div>
                                                 <div className="text-2xl font-black font-mono flex items-center justify-center gap-1">
-                                                    <DollarSign className="h-5 w-5" /> {task.reward.replace(' IP', '')} <span className="text-sm">IP</span>
+                                                    <DollarSign className="h-5 w-5" /> 50.0 <span className="text-sm">IP</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -316,29 +252,22 @@ export default function VerifyPage() {
                                             <div className="space-y-4">
                                                 <div className="bg-white border-2 border-black p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                                                     <p className="text-[10px] font-bold uppercase text-neutral-500 mb-1">Predicted Quality Tier</p>
-                                                    <p className="font-black text-xl uppercase leading-tight">{task.aiPrediction}</p>
+                                                    <p className="font-black text-xl uppercase leading-tight">{task.tierLabel || "Unverified"}</p>
                                                 </div>
 
                                                 <div className="space-y-1">
                                                     <div className="flex justify-between text-xs font-bold uppercase">
                                                         <span>Confidence Score</span>
-                                                        <span>{task.aiConfidence}%</span>
+                                                        <span>{task.aiScore}%</span>
                                                     </div>
                                                     <div className="h-4 w-full border-2 border-black bg-white relative">
-                                                        <div className={`absolute top-0 left-0 h-full border-r-2 border-black ${task.aiConfidence < 80 ? 'bg-orange-400' : 'bg-green-400'}`} style={{ width: `${task.aiConfidence}%` }} />
+                                                        <div className={`absolute top-0 left-0 h-full border-r-2 border-black ${task.aiScore < 80 ? 'bg-orange-400' : 'bg-green-400'}`} style={{ width: `${task.aiScore}%` }} />
                                                     </div>
                                                 </div>
 
-                                                {task.aiFlag !== "Clean" ? (
-                                                    <div className="flex items-start gap-2 bg-red-100 text-red-700 p-3 border-2 border-black">
-                                                        <AlertTriangle className="h-5 w-5 shrink-0" />
-                                                        <span className="text-xs font-bold uppercase">FLAGGED: {task.aiFlag}</span>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center gap-2 text-green-700 font-bold text-xs uppercase">
-                                                        <ShieldCheck className="h-4 w-4" /> AI Check Passed
-                                                    </div>
-                                                )}
+                                                <div className="flex items-center gap-2 text-green-700 font-bold text-xs uppercase">
+                                                    <ShieldCheck className="h-4 w-4" /> AI Check Passed
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
