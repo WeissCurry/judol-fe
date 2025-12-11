@@ -24,52 +24,6 @@ const STATIC_TASKS = [
 
 export default function VerifyPage() {
     const [tasks, setTasks] = useState<any[]>(STATIC_TASKS);
-
-    // --- 1. LOAD TASKS (Prioritaskan Data Minting User) ---
-    useEffect(() => {
-        const localData = localStorage.getItem("myAssets");
-        if (localData) {
-            const parsedData = JSON.parse(localData);
-
-            // Filter hanya yang statusnya "processing" (butuh verifikasi)
-            const pendingAssets = parsedData
-                .filter((item: any) => item.status === 'processing')
-                .map((item: any) => {
-                    // Bersihkan Score AI
-                    let scoreVal = 85;
-                    if (item.aiScore) {
-                        scoreVal = typeof item.aiScore === 'string' ? parseInt(item.aiScore.replace('%', '')) : item.aiScore;
-                    }
-
-                    // Bersihkan Keywords menjadi Tags
-                    let tagsArray = ["New Submission"];
-                    if (item.keywords) {
-                        tagsArray = item.keywords.split(',').map((k: string) => k.trim().toUpperCase()).slice(0, 3);
-                    }
-
-                    return {
-                        id: item.id,
-                        title: item.title,
-                        author: item.author?.name || "Unknown Researcher", // Ambil nama author asli
-                        abstract: item.abstract || "Abstract content pending verification...",
-                        aiPrediction: item.tier || "UNVERIFIED CANDIDATE", // Ambil tier asli
-                        aiConfidence: scoreVal || 85, // Ambil score asli
-                        reward: "50.0 IP", // Set reward default untuk reviewer
-                        timeRemaining: "23H 59M",
-                        tags: tagsArray,
-                        aiFlag: "Clean"
-                    };
-                });
-
-            // Jika ada data pending, gabungkan dengan static. Jika tidak, pakai static saja.
-            if (pendingAssets.length > 0) {
-                setTasks([...pendingAssets, ...STATIC_TASKS]);
-            } else {
-                setTasks(STATIC_TASKS);
-            }
-        }
-    }, []);
-
     const [reviewerStats] = useState({
         reputation: 850,
         level: "SENIOR REVIEWER",
@@ -77,6 +31,94 @@ export default function VerifyPage() {
         reviewedCount: 124,
         nextLevelProgress: 72,
     });
+
+    // --- 1. LOAD TASKS (Prioritaskan Data Minting User & Fetch IPFS) ---
+    useEffect(() => {
+        const fetchTasks = async () => {
+            const localData = localStorage.getItem("myAssets");
+            if (localData) {
+                const parsedData = JSON.parse(localData);
+
+                // Filter hanya yang statusnya "processing"
+                const pendingItems = parsedData.filter((item: any) => item.status === 'processing');
+
+                if (pendingItems.length > 0) {
+                    const fetchedTasks = await Promise.all(pendingItems.map(async (item: any) => {
+                        let title = item.title;
+                        let abstract = item.abstract || "Abstract content pending verification...";
+                        let author = item.author?.name || "Unknown Researcher";
+                        let tagsArray = ["New Submission"];
+                        let aiPrediction = item.tier || "UNVERIFIED CANDIDATE";
+                        let aiConfidence = 85;
+
+                        // Coba fetch metadata dari IPFS jika URL tersedia
+                        if (item.metadataUrl) {
+                            try {
+                                const response = await fetch(item.metadataUrl);
+                                if (response.ok) {
+                                    const metadata = await response.json();
+                                    title = metadata.name || title;
+                                    abstract = metadata.description || abstract;
+
+                                    // Ambil attributes dari metadata
+                                    if (metadata.attributes) {
+                                        const authorAttr = metadata.attributes.find((attr: any) => attr.trait_type === "Author");
+                                        if (authorAttr) author = authorAttr.value;
+
+                                        const keywordsAttr = metadata.attributes.find((attr: any) => attr.trait_type === "Keywords");
+                                        if (keywordsAttr) {
+                                            tagsArray = keywordsAttr.value.split(',').map((k: string) => k.trim().toUpperCase()).slice(0, 3);
+                                        }
+
+                                        const sintaAttr = metadata.attributes.find((attr: any) => attr.trait_type === "SintaPrediction");
+                                        if (sintaAttr) aiPrediction = sintaAttr.value;
+
+                                        const aiScoreAttr = metadata.attributes.find((attr: any) => attr.trait_type === "AICertainty");
+                                        if (aiScoreAttr) {
+                                            // Parse score val (e.g. "85%")
+                                            const scoreVal = parseInt(aiScoreAttr.value.replace('%', ''));
+                                            if (!isNaN(scoreVal)) aiConfidence = scoreVal;
+                                        }
+                                    }
+                                }
+                            } catch (error) {
+                                console.error("Failed to fetch IPFS metadata for verification task:", error);
+                            }
+                        } else {
+                            // Fallback ke local data jika fetch gagal/tidak ada url
+                            // Bersihkan Score AI dari local
+                            if (item.aiScore) {
+                                const scoreVal = typeof item.aiScore === 'string' ? parseInt(item.aiScore.replace('%', '')) : item.aiScore;
+                                if (!isNaN(scoreVal)) aiConfidence = scoreVal;
+                            }
+                            if (item.keywords) {
+                                tagsArray = item.keywords.split(',').map((k: string) => k.trim().toUpperCase()).slice(0, 3);
+                            }
+                        }
+
+                        return {
+                            id: item.id,
+                            title: title,
+                            author: author,
+                            abstract: abstract,
+                            aiPrediction: aiPrediction,
+                            aiConfidence: aiConfidence,
+                            reward: "50.0 IP",
+                            timeRemaining: "23H 59M",
+                            tags: tagsArray,
+                            aiFlag: "Clean"
+                        };
+                    }));
+
+                    setTasks([...fetchedTasks, ...STATIC_TASKS]);
+                } else {
+                    setTasks(STATIC_TASKS);
+                }
+            }
+        };
+
+        fetchTasks();
+    }, []);
 
     // --- 2. HANDLE VOTE (Update LocalStorage) ---
     const handleVote = (id: string, decision: 'APPROVE' | 'REJECT') => {
@@ -115,7 +157,7 @@ export default function VerifyPage() {
     };
 
     return (
-        <div className="min-h-screen bg-white pb-20 pt-12 font-sans  selection:bg-yellow-300 selection:text-black">
+        <div className="min-h-screen bg-white pb-20 pt-12 font-sans selection:bg-yellow-300 selection:text-black">
 
             {/* Background Grid Pattern */}
             <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
@@ -217,7 +259,6 @@ export default function VerifyPage() {
                         ) : (
                             tasks.map((task) => (
                                 <Card key={task.id} className="group overflow-visible border-2 border-black rounded-none shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-white relative">
-
 
                                     {/* Header */}
                                     <div className="p-6 md:p-8 border-b-2 border-black bg-neutral-50 flex flex-col md:flex-row justify-between gap-6 pl-6 pt-12 md:pt-8 md:pl-8">
