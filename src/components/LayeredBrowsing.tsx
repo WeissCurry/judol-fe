@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PaperCard } from "./PaperCard";
 import { Search, Filter, CheckCircle2, Bot, Database, ArrowRight } from "lucide-react";
 
-const mockPapers = {
+// --- STATIC FALLBACK DATA (Only used if no local data) ---
+const STATIC_FALLBACK = {
   verified: [
     {
       title: "Optimizing ZK-Rollups for High Frequency Trading on Story Protocol",
@@ -21,59 +22,83 @@ const mockPapers = {
       royaltyShare: "5%",
       aiScore: 98,
       licenseType: "Commercial (PIL)"
-    },
-    {
-      title: "Legal Frameworks for AI-Generated IP Ownership in Indonesia",
-      abstract: "Analyzing the intersection of Indonesian Copyright Law and Generative AI outputs. Minted as a foundational IP for legal LLM training.",
-      authors: [{ name: "Dr. Ahmad Rahman", sintaLevel: 1 }],
-      status: "verified" as const,
-      submitDate: "2024-11-20",
-      category: "Legal Tech",
-      views: 1890,
-      downloads: 654,
-      royaltyShare: "3.5%",
-      aiScore: 92,
-      licenseType: "Commercial (PIL)"
     }
   ],
-  processing: [
-    {
-      title: "Smart Contract Vulnerabilities in DAO Treasuries",
-      abstract: "A systematic review of reentrancy attacks in 2024. Currently under review by the Expert Node after passing AI pre-screening.",
-      authors: [{ name: "Dr. Made Suarta", sintaLevel: 3 }, { name: "Ir. Rina Melati", sintaLevel: 4 }],
-      status: "processing" as const,
-      submitDate: "2024-11-29",
-      category: "Cybersecurity",
-      views: 890,
-      downloads: 234,
-      aiScore: 78,
-      licenseType: "Pending"
-    }
-  ],
-  data_pool: [
-    {
-      title: "Failed Experiment: Algo-Trading using LSTM on Low Volatility Assets",
-      abstract: "Documentation of negative results in applying LSTM models. While rejected for commercial novelty, this dataset is crucial for preventing overfitting in Financial AI models.",
-      authors: [{ name: "Muhammad Fajar", sintaLevel: 5 }],
-      status: "data_pool" as const,
-      submitDate: "2024-11-10",
-      category: "AI / Machine Learning",
-      views: 456,
-      downloads: 89,
-      aiScore: 45,
-      licenseType: "Data Only (Training)"
-    }
-  ]
+  processing: [],
+  data_pool: []
 };
 
 export const LayeredBrowsing = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   
+  // State for paper data
+  const [paperData, setPaperData] = useState<{
+    verified: any[];
+    processing: any[];
+    data_pool: any[];
+  }>(STATIC_FALLBACK);
+
+  // --- FETCH REAL DATA FROM LOCAL STORAGE ---
+  useEffect(() => {
+    const localData = localStorage.getItem("myAssets");
+    if (localData) {
+      const parsedData = JSON.parse(localData);
+      
+      const newVerified: any[] = [];
+      const newProcessing: any[] = [];
+      const newDataPool: any[] = [];
+
+      parsedData.forEach((item: any) => {
+        // Parse AI Score
+        let scoreVal = 85; 
+        if(item.aiScore) {
+             scoreVal = typeof item.aiScore === 'string' ? parseInt(item.aiScore.replace('%','')) : item.aiScore;
+        }
+
+        // Parse Sinta
+        let sintaRank = 0;
+        if (item.tier && item.tier.includes("SINTA")) {
+            const match = item.tier.match(/SINTA\s(\d+)/);
+            if (match) sintaRank = parseInt(match[1]);
+        }
+
+        // Construct Paper Object
+        const paperObj = {
+            title: item.title?.toUpperCase() || "Untitled Work",
+            abstract: item.abstract || "Abstract content pending verification...",
+            authors: [{ name: item.author?.name || "Unknown Author", sintaLevel: sintaRank || 0 }],
+            status: item.status, // 'verified', 'processing', or 'data_pool'
+            submitDate: item.mintDate || "Just now",
+            category: "Uncategorized", // Default category
+            views: item.views || 0,
+            downloads: item.downloads || 0,
+            royaltyShare: item.status === 'verified' ? "5%" : "-",
+            aiScore: scoreVal,
+            licenseType: item.license || "Pending"
+        };
+
+        // Distribute to correct bucket
+        if (item.status === 'verified') newVerified.push(paperObj);
+        else if (item.status === 'processing') newProcessing.push(paperObj);
+        else newDataPool.push(paperObj); // Default to data pool if unknown/rejected
+      });
+
+      // Update state if we found local data
+      if (newVerified.length > 0 || newProcessing.length > 0 || newDataPool.length > 0) {
+          setPaperData({
+              verified: newVerified.length > 0 ? newVerified : STATIC_FALLBACK.verified,
+              processing: newProcessing,
+              data_pool: newDataPool
+          });
+      }
+    }
+  }, []);
+
   const layerStats = {
-    verified: mockPapers.verified.length,
-    processing: mockPapers.processing.length,
-    data_pool: mockPapers.data_pool.length
+    verified: paperData.verified.length,
+    processing: paperData.processing.length,
+    data_pool: paperData.data_pool.length
   };
 
   return (
@@ -197,7 +222,7 @@ export const LayeredBrowsing = () => {
           <div className="min-h-[400px]">
             <TabsContent value="verified" className="space-y-6 mt-0">
               <div className="grid gap-6">
-                {mockPapers.verified.map((paper, index) => (
+                {paperData.verified.slice(0, 3).map((paper, index) => (
                   <PaperCard key={index} {...paper} />
                 ))}
               </div>
@@ -205,7 +230,7 @@ export const LayeredBrowsing = () => {
 
             <TabsContent value="processing" className="space-y-6 mt-0">
               <div className="grid gap-6">
-                {mockPapers.processing.map((paper, index) => (
+                {paperData.processing.slice(0, 3).map((paper, index) => (
                   <PaperCard key={index} {...paper} />
                 ))}
               </div>
@@ -213,7 +238,7 @@ export const LayeredBrowsing = () => {
 
             <TabsContent value="data_pool" className="space-y-6 mt-0">
               <div className="grid gap-6">
-                {mockPapers.data_pool.map((paper, index) => (
+                {paperData.data_pool.slice(0, 3).map((paper, index) => (
                   <PaperCard key={index} {...paper} />
                 ))}
               </div>
@@ -224,7 +249,7 @@ export const LayeredBrowsing = () => {
         
         <div className="mt-12 text-center">
             <Button onClick={() => window.location.href = '/explore'} variant="link" className="text-black font-bold underline decoration-2 underline-offset-4 hover:bg-yellow-300">
-                VIEW ALL 2,304 ASSETS <ArrowRight className="ml-2 h-4 w-4"/>
+                VIEW ALL ASSETS <ArrowRight className="ml-2 h-4 w-4"/>
             </Button>
         </div>
 

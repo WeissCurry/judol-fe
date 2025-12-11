@@ -78,6 +78,8 @@ export default function GovernancePage() {
 
     return (
         <div className="min-h-screen bg-white pb-20 font-sans  selection:bg-yellow-300 selection:text-black">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
+
 
             {/* 1. HERO SECTION */}
             <section className="pt-16 pb-12 bg-white">

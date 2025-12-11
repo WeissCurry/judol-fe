@@ -6,50 +6,67 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
-// --- MOCK DATA STATIC (Tugas Default) ---
+// --- MOCK DATA STATIC (Sebagai Fallback jika belum ada submission) ---
 const STATIC_TASKS = [
     {
         id: "101",
         title: "Analysis of Yield Farming Strategies on Layer 2 Networks",
         author: "CryptoDev_22",
         abstract: "We compare APR of Uniswap V3 on Optimism vs Arbitrum. Results show 15% higher efficiency on Arbitrum due to lower latency.",
-        aiPrediction: "SINTA 2 (Novelty High)",
+        aiPrediction: "CANDIDATE SINTA 2",
         aiConfidence: 88,
-        reward: "10",
+        reward: "10.0 IP",
         timeRemaining: "02H 15M",
         tags: ["DeFi", "Layer 2"],
         aiFlag: "Clean",
     },
-    // ... task mock lainnya ...
 ];
 
 export default function VerifyPage() {
     const [tasks, setTasks] = useState<any[]>(STATIC_TASKS);
 
-    // --- 1. LOAD TASKS (Gabungkan Mock + Data Minting User) ---
+    // --- 1. LOAD TASKS (Prioritaskan Data Minting User) ---
     useEffect(() => {
         const localData = localStorage.getItem("myAssets");
         if (localData) {
             const parsedData = JSON.parse(localData);
+
             // Filter hanya yang statusnya "processing" (butuh verifikasi)
             const pendingAssets = parsedData
                 .filter((item: any) => item.status === 'processing')
-                .map((item: any) => ({
-                    // Mapping data dari dashboard ke format Task Card
-                    id: item.id,
-                    title: item.title,
-                    author: "You (Reviewing Own Paper)", // Simulasi self-review untuk demo
-                    abstract: "Abstract content pending verification...", // Placeholder
-                    aiPrediction: "Candidate SINTA 2", // Mock prediction
-                    aiConfidence: 85,
-                    reward: "10.0 IP", // Reward buat reviewer
-                    timeRemaining: "23H 59M",
-                    tags: ["New Submission"],
-                    aiFlag: "Clean"
-                }));
+                .map((item: any) => {
+                    // Bersihkan Score AI
+                    let scoreVal = 85;
+                    if (item.aiScore) {
+                        scoreVal = typeof item.aiScore === 'string' ? parseInt(item.aiScore.replace('%', '')) : item.aiScore;
+                    }
 
-            // Taruh data user di paling atas
-            setTasks([...pendingAssets, ...STATIC_TASKS]);
+                    // Bersihkan Keywords menjadi Tags
+                    let tagsArray = ["New Submission"];
+                    if (item.keywords) {
+                        tagsArray = item.keywords.split(',').map((k: string) => k.trim().toUpperCase()).slice(0, 3);
+                    }
+
+                    return {
+                        id: item.id,
+                        title: item.title,
+                        author: item.author?.name || "Unknown Researcher", // Ambil nama author asli
+                        abstract: item.abstract || "Abstract content pending verification...",
+                        aiPrediction: item.tier || "UNVERIFIED CANDIDATE", // Ambil tier asli
+                        aiConfidence: scoreVal || 85, // Ambil score asli
+                        reward: "50.0 IP", // Set reward default untuk reviewer
+                        timeRemaining: "23H 59M",
+                        tags: tagsArray,
+                        aiFlag: "Clean"
+                    };
+                });
+
+            // Jika ada data pending, gabungkan dengan static. Jika tidak, pakai static saja.
+            if (pendingAssets.length > 0) {
+                setTasks([...pendingAssets, ...STATIC_TASKS]);
+            } else {
+                setTasks(STATIC_TASKS);
+            }
         }
     }, []);
 
@@ -115,7 +132,7 @@ export default function VerifyPage() {
                             Reviewer <br className="md:hidden" /> Hub
                         </h1>
                         <p className="text-xl font-medium text-neutral-800 mt-4 border-l-4 border-black pl-4">
-                            Validate AI findings, curate the Knowledge Graph, and earn <span className="font-bold bg-green-200 px-1">IP Tokens</span>.
+                            Validate AI findings, curate the Knowledge Graph, and earn <span className="font-bold bg-green-200 px-1 border border-black">IP Tokens</span>.
                         </p>
                     </div>
 
@@ -201,6 +218,7 @@ export default function VerifyPage() {
                             tasks.map((task) => (
                                 <Card key={task.id} className="group overflow-visible border-2 border-black rounded-none shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-white relative">
 
+
                                     {/* Header */}
                                     <div className="p-6 md:p-8 border-b-2 border-black bg-neutral-50 flex flex-col md:flex-row justify-between gap-6 pl-6 pt-12 md:pt-8 md:pl-8">
                                         <div className="space-y-3">
@@ -216,7 +234,7 @@ export default function VerifyPage() {
                                             </div>
                                             <h3 className="text-3xl font-black uppercase leading-none">{task.title}</h3>
                                             <p className="font-bold text-neutral-500 text-sm">
-                                                SUBMITTED BY <span className="text-black bg-yellow-200 px-1 ">{task.author}</span>
+                                                SUBMITTED BY <span className="text-black bg-yellow-200 px-1 border border-black">{task.author}</span>
                                             </p>
                                         </div>
 

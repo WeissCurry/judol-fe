@@ -1,11 +1,8 @@
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Download, Share2, ShieldCheck, Sparkles, FileText, Globe, ExternalLink, Copy, CheckCircle2, Clock, Lock, FileKey, ArrowRight, DollarSign } from "lucide-react";
+import { ArrowLeft, Download, ShieldCheck, FileText, Globe, ExternalLink, Copy, CheckCircle2, Clock, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
@@ -23,38 +20,71 @@ const MOCK_ASSET = {
     pdfUrl: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
 };
 
-const FULL_ABSTRACT_TEXT = "This research paper explores the implementation of Zero-Knowledge Rollups (ZK-Rollups) specifically tailored for High-Frequency Trading (HFT) environments on the Story Protocol blockchain. By introducing a novel 'Optimistic-Zk' hybrid proof mechanism, we demonstrate a 40% reduction in proof generation time while maintaining the security guarantees required for commercial IP licensing. Furthermore, we analyze the economic implications of gas fee reduction for institutional traders and propose a new standard for 'Speed-Verified' assets within the JUDOL ecosystem. The results suggest that Layer 2 solutions can effectively support HFT volume without compromising decentralization.";
-
 export default function AssetDetailPage() {
     const { id } = useParams();
     const [asset, setAsset] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
-    // --- 1. FETCH DATA (LocalStorage Hybrid) ---
+    // --- 1. FETCH DATA (LocalStorage + IPFS Metadata) ---
     useEffect(() => {
-        const localData = localStorage.getItem("myAssets");
-        let foundAsset = null;
-        if (localData) {
-            const parsed = JSON.parse(localData);
-            foundAsset = parsed.find((item: any) => item.id === id);
-        }
-
-        if (foundAsset) {
-            const displayAbstract = foundAsset.status === 'verified' ? (foundAsset.abstract && foundAsset.abstract.length > 50 ? foundAsset.abstract : FULL_ABSTRACT_TEXT) : "This asset is currently under review. The full content is encrypted on IPFS pending commercial license verification.";
+        const fetchAssetData = async () => {
+            const localData = localStorage.getItem("myAssets");
+            let foundAsset = null;
             
-            setAsset({
-                ...foundAsset,
-                author: { name: "You (Researcher)", org: "University of Wkwkland", wallet: "0x71C...9A21", sinta: 2 },
-                abstract: displayAbstract,
-                licenseType: foundAsset.license || "Pending",
-                price: foundAsset.status === 'verified' ? "50 IP" : "To be determined",
-                pdfUrl: foundAsset.pdfUrl || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-                aiAnalysis: { totalScore: 88, novelty: 85, grammar: 90, integrity: 95, verdict: "High Potential" }
-            });
-        } else {
-            setAsset(MOCK_ASSET);
-        }
-        setLoading(false);
+            if (localData) {
+                const parsed = JSON.parse(localData);
+                foundAsset = parsed.find((item: any) => item.id === id);
+            }
+
+            if (foundAsset) {
+                // Default value dari local storage
+                let finalAuthorName = foundAsset.author?.name || "Unknown Researcher";
+                let finalAbstract = foundAsset.abstract || "Abstract not available.";
+
+                // Jika ada link metadata, coba fetch isi aslinya dari IPFS
+                if (foundAsset.metadataUrl) {
+                    try {
+                        const response = await fetch(foundAsset.metadataUrl);
+                        if (response.ok) {
+                            const metadata = await response.json();
+                            // Update abstract dari IPFS
+                            if (metadata.description) finalAbstract = metadata.description;
+                            
+                            // Cari author di attributes
+                            const authorAttr = metadata.attributes?.find((attr: any) => attr.trait_type === "Author");
+                            if (authorAttr) finalAuthorName = authorAttr.value;
+                        }
+                    } catch (error) {
+                        console.error("Failed to fetch IPFS metadata:", error);
+                    }
+                }
+
+                // Logic tampilan Abstrak (Short vs Full)
+                const displayAbstract = foundAsset.status === 'verified' 
+                    ? finalAbstract 
+                    : "This asset is currently under review. The full content is encrypted on IPFS pending commercial license verification.";
+
+                setAsset({
+                    ...foundAsset,
+                    author: { 
+                        name: finalAuthorName, 
+                        org: foundAsset.author?.org || "Unknown Institution", 
+                        wallet: "0x71C...9A21", 
+                        sinta: 2 
+                    },
+                    abstract: displayAbstract,
+                    licenseType: foundAsset.license || "Pending",
+                    price: foundAsset.status === 'verified' ? "50 IP" : "To be determined",
+                    pdfUrl: foundAsset.pdfUrl || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+                    aiAnalysis: { totalScore: 88, novelty: 85, grammar: 90, integrity: 95, verdict: "High Potential" }
+                });
+            } else {
+                setAsset(MOCK_ASSET);
+            }
+            setLoading(false);
+        };
+
+        fetchAssetData();
     }, [id]);
 
     const handleCopy = (text: string) => {
@@ -75,7 +105,7 @@ export default function AssetDetailPage() {
     if (!asset) return <div className="min-h-screen flex items-center justify-center font-mono text-2xl font-bold uppercase">Asset Not Found</div>;
 
     return (
-        <div className="min-h-screen bg-white pb-20 pt-8 font-sans  selection:bg-yellow-300 selection:text-black relative">
+        <div className="min-h-screen bg-white pb-20 pt-8 font-sans selection:bg-yellow-300 selection:text-black relative">
             
             {/* Background Pattern */}
             <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
@@ -281,7 +311,7 @@ export default function AssetDetailPage() {
                                 <Button 
                                     variant="outline" 
                                     className="w-full h-10 text-xs font-bold uppercase border-2 border-black rounded-none hover:bg-black hover:text-white transition-all"
-                                    onClick={() => window.open(`https://aeneid.storyscan.xyz/ip/${asset.id}`, '_blank')}
+                                    onClick={() => window.open(`https://aeneid.storyscan.xyz/address/${asset.id}`, '_blank')}
                                 >
                                     View on Story Explorer <ExternalLink className="ml-2 h-3 w-3" />
                                 </Button>
